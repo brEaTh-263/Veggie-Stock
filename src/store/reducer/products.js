@@ -1,4 +1,8 @@
-import { EDIT_PRODUCT, GET_ALL_PRODUCTS } from "../actions/products";
+import {
+  ADD_PRODUCT,
+  EDIT_PRODUCT,
+  GET_ALL_PRODUCTS,
+} from "../actions/products";
 
 const initialState = {
   products: [],
@@ -12,9 +16,19 @@ export default (state = initialState, action) => {
       };
     }
     case EDIT_PRODUCT: {
-      const newProducts = state.products.filter(
-        (prod) => prod._id !== action.data
-      );
+      const newProducts = state.products.map((prod) => {
+        if (prod._id === action.data._id) {
+          return action.data;
+        } else {
+          return prod;
+        }
+      });
+      return {
+        products: newProducts,
+      };
+    }
+    case ADD_PRODUCT: {
+      const newProducts = state.products.push(action.data);
       return {
         products: newProducts,
       };

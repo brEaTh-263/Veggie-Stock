@@ -1,30 +1,43 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { TextInput, RadioButton } from "react-native-paper";
+import {
+  TextInput,
+  RadioButton,
+  Checkbox,
+  Portal,
+  Dialog,
+  Button,
+} from "react-native-paper";
 import {
   View,
   Text,
   StyleSheet,
   KeyboardAvoidingView,
   ActivityIndicator,
+  Platform,
+  ScrollView,
+  Image,
+  TouchableOpacity,
+  Alert,
 } from "react-native";
+import * as ImageManipulator from "expo-image-manipulator";
+import InputSpinner from "react-native-input-spinner";
 import { useSelector, useDispatch } from "react-redux";
-import { ScrollView } from "react-native";
 import { AntDesign } from "@expo/vector-icons";
-import { TouchableOpacity } from "react-native";
 import * as productActions from "../store/actions/products";
 import { useForm, Controller } from "react-hook-form";
-
-import { Alert } from "react-native";
+import * as ImagePicker from "expo-image-picker";
+import Categories from "../Components/ProductItem/Categories";
+import SubCategories from "../Components/ProductItem/SubCategories";
 
 const EditScreen = ({ navigation, route }) => {
   const { productId, newProduct } = route.params;
   const [isLoading, setIsLoading] = useState(false);
+
   const token = useSelector((state) => state.Auth.token);
   const dispatch = useDispatch();
   const product = useSelector((state) =>
     state.Products.products.filter((prod) => prod._id === productId)
   );
-  // console.log(product);
   const {
     control,
     handleSubmit,
@@ -34,76 +47,49 @@ const EditScreen = ({ navigation, route }) => {
     setError,
   } = useForm();
 
-  const onSubmit = async ({
-    name,
-    indianName,
-    subCategory,
-    price,
-    quantity,
-    imageUrl,
-    category,
-  }) => {
-    if (
-      category !== "Vegetables" &&
-      category !== "Fruits" &&
-      category !== "Foodgrains,Oil and Vinegar" &&
-      category !== "Fish and Meat" &&
-      category !== "Dairy,Bakery and Eggs" &&
-      category !== "Canned and Packaged" &&
-      category !== "Snacks and Beverages" &&
-      category !== "Self-care and Hygiene"
-    ) {
-      setError("category", {
-        shouldFocus: true,
-      });
-      return;
-    }
-    try {
-      setIsLoading(true);
-      if (newProduct) {
-        await dispatch(
-          productActions.addProduct(
-            {
-              name,
-              indianName,
-              category,
-              subCategory,
-              price,
-              quantity,
-              imageUrl,
-            },
-            token
-          )
-        );
-      } else {
-        console.log(name, indianName, category, subCategory, price, imageUrl);
-        await dispatch(
-          productActions.editProduct(
-            {
-              _id: productId,
-              name,
-              indianName,
-              category,
-              subCategory,
-              price,
-              quantity,
-              imageUrl,
-            },
-            token
-          )
-        );
-      }
+  const [weightOnly, setWeightOnly] = useState(
+    product.length > 0 ? product[0].weightOnly : false
+  );
+  const [qty, setQty] = useState(product.length > 0 ? product[0].quantity : 0);
+  const [category, setCategory] = useState(
+    product.length > 0 ? product[0].Category : "Vegetables"
+  );
+  const [subCategory, setSubCategory] = useState(
+    product.length > 0 ? product[0].subCategory : ""
+  );
+  const [image, setImage] = useState(
+    product.length > 0
+      ? product[0].imageUrl
+      : "https://image.freepik.com/free-vector/page-found-concept-illustration_114360-1869.jpg"
+  );
+  const [visible, setVisible] = useState(false);
 
-      setIsLoading(false);
-      navigation.navigate("Product");
-    } catch (error) {
-      // console.log(error);
-      setIsLoading(false);
-      return Alert.alert(
-        "Something went wrong",
-        "Please try again with correct credentials",
-        [{ text: "Okay" }]
-      );
+  const clickImage = async () => {
+    let result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [2, 2],
+      quality: 0.7,
+    });
+
+    if (!result.cancelled) {
+      setImage(result.uri);
+    }
+  };
+  const pickImage = async () => {
+    try {
+      let result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 1,
+      });
+
+      if (!result.cancelled) {
+        setImage(result.uri);
+      }
+    } catch (E) {
+      console.log(E);
     }
   };
 
@@ -120,7 +106,73 @@ const EditScreen = ({ navigation, route }) => {
         );
       },
     });
-  }, [navigation]);
+  });
+
+  const onSubmit = async ({ name, indianName, priceKg, priceQty }) => {
+    try {
+      setIsLoading(true);
+      const manipResult = await ImageManipulator.manipulateAsync(image, [
+        { resize: { width: 720, height: 540 } },
+      ]);
+      const body = new FormData();
+      body.append("image", {
+        uri: manipResult.uri,
+        type: "image/jpg",
+        name: "productPic.jpg",
+      });
+      if (!newProduct) {
+        await dispatch(
+          productActions.editProductPic(token, body, product[0]._id)
+        );
+        await dispatch(
+          productActions.editProduct(
+            {
+              _id: productId,
+              name,
+              indianName,
+              priceKg,
+              priceQty,
+              quantity: qty,
+              weightOnly: weightOnly,
+              category: category,
+              subCategory: subCategory,
+            },
+            token
+          )
+        );
+      } else {
+        await dispatch(
+          productActions.addProduct(
+            {
+              name,
+              indianName,
+              priceKg,
+              priceQty,
+              quantity: qty,
+              weightOnly: weightOnly,
+              category: category,
+              subCategory: subCategory,
+            },
+            token
+          )
+        );
+        await dispatch(
+          productActions.addProductPic(token, body, name, category)
+        );
+      }
+
+      setIsLoading(false);
+      navigation.navigate("Product");
+    } catch (error) {
+      console.log(error);
+      setIsLoading(false);
+      return Alert.alert(
+        "Something went wrong",
+        "Please try again with correct credentials",
+        [{ text: "Okay" }]
+      );
+    }
+  };
 
   if (isLoading) {
     return (
@@ -132,6 +184,34 @@ const EditScreen = ({ navigation, route }) => {
 
   return (
     <ScrollView style={styles.container}>
+      <Portal>
+        <Dialog visible={visible} onDismiss={() => setVisible(false)}>
+          <Dialog.Actions style={{ flexDirection: "column" }}>
+            <Button onPress={() => clickImage()} style={{ width: "100%" }}>
+              Take a picture!
+            </Button>
+            <Button onPress={() => pickImage()} style={{ width: "100%" }}>
+              Choose from gallery
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+      <View style={{ margin: 10, height: 300 }}>
+        <Image
+          source={{ uri: image, cache: "reload" }}
+          resizeMode="contain"
+          style={{ width: "100%", height: "100%", borderRadius: 20 }}
+        />
+      </View>
+      <TouchableOpacity
+        style={{ flexDirection: "row", margin: 20, alignItems: "center" }}
+        onPress={() => {
+          setVisible(true);
+        }}
+      >
+        <AntDesign name="edit" size={24} color="black" />
+        <Text style={{ fontSize: 18, marginHorizontal: 20 }}>Edit pic</Text>
+      </TouchableOpacity>
       <Controller
         control={control}
         render={({ onChange, onBlur, value }) => (
@@ -181,33 +261,33 @@ const EditScreen = ({ navigation, route }) => {
         </View>
       )}
 
-      <Controller
-        control={control}
-        render={({ onChange, onBlur, value }) => (
-          <View style={styles.inputContainer}>
-            <TextInput
-              style={{ margin: 15 }}
-              onBlur={onBlur}
-              onChangeText={(value) => onChange(value)}
-              value={value}
-              mode="outlined"
-              label="Category"
-            />
-          </View>
-        )}
-        name="category"
-        rules={{
-          required: true,
-        }}
-        defaultValue={product.length ? product[0].Category : ""}
-      />
-      {errors.category && (
-        <View style={styles.errorMessage}>
-          <Text style={{ color: "red", fontWeight: "bold" }}>
-            Must be Vegetables or Fruits or Grains or Non-Veg
-          </Text>
+      <View style={{ margin: 20 }}>
+        <Text style={{ fontSize: 20, fontWeight: "bold", marginBottom: 20 }}>
+          Quantity in Stock
+        </Text>
+        <View style={{ alignItems: "center" }}>
+          <InputSpinner
+            max={100}
+            min={0}
+            step={1}
+            type="int"
+            colorMax={"#f04048"}
+            colorMin={"#40c5f4"}
+            value={qty}
+            onChange={(num) => {
+              setQty(num);
+            }}
+          />
         </View>
-      )}
+      </View>
+
+      <Categories category={category} setCategory={setCategory} />
+
+      <SubCategories
+        setSubCategory={setSubCategory}
+        subCategory={subCategory}
+        category={category}
+      />
 
       <Controller
         control={control}
@@ -219,18 +299,18 @@ const EditScreen = ({ navigation, route }) => {
               onChangeText={(value) => onChange(value)}
               value={value}
               mode="outlined"
-              label="Price"
+              label="Price/Kg"
             />
           </View>
         )}
-        name="price"
+        name="priceKg"
         rules={{
           required: true,
           min: 0,
         }}
-        defaultValue={product.length ? `${product[0].price}` : ""}
+        defaultValue={product.length ? `${product[0].priceKg}` : ""}
       />
-      {errors.price && (
+      {errors.priceKg && (
         <View style={styles.errorMessage}>
           <Text style={{ color: "red", fontWeight: "bold" }}>
             Give a valid price
@@ -247,79 +327,40 @@ const EditScreen = ({ navigation, route }) => {
               onChangeText={(value) => onChange(value)}
               value={value}
               mode="outlined"
-              label="Image Url"
+              label="Price/Qty"
             />
           </View>
         )}
-        name="imageUrl"
-        rules={
-          {
-            // required: true,
-          }
-        }
-        defaultValue={
-          product.length ? (product[0].imageUrl ? product[0].imageUrl : "") : ""
-        }
+        name="priceQty"
+        rules={{
+          required: true,
+          min: 0,
+        }}
+        defaultValue={product.length ? `${product[0].priceQty}` : ""}
       />
-      {errors.imageUrl && (
+      {errors.priceQty && (
         <View style={styles.errorMessage}>
-          <Text style={{ color: "red", fontWeight: "bold" }}>Wrong!!</Text>
+          <Text style={{ color: "red", fontWeight: "bold" }}>
+            Give a valid price
+          </Text>
         </View>
       )}
-      <Controller
-        control={control}
-        render={({ onChange, onBlur, value }) => (
-          <View style={styles.inputContainer}>
-            <TextInput
-              style={{ margin: 15 }}
-              onBlur={onBlur}
-              onChangeText={(value) => onChange(value)}
-              value={value}
-              mode="outlined"
-              label="Quantity"
-            />
-          </View>
-        )}
-        name="quantity"
-        rules={
-          {
-            // required: true,
-          }
-        }
-        defaultValue={product.length ? `${product[0].quantity}` : ""}
-      />
-      {errors.quantity && (
-        <View style={styles.errorMessage}>
-          <Text style={{ color: "red", fontWeight: "bold" }}>Wrong!!</Text>
-        </View>
-      )}
-      <Controller
-        control={control}
-        render={({ onChange, onBlur, value }) => (
-          <View style={styles.inputContainer}>
-            <TextInput
-              style={{ margin: 15 }}
-              onBlur={onBlur}
-              onChangeText={(value) => onChange(value)}
-              value={value}
-              mode="outlined"
-              label="Sub Category"
-            />
-          </View>
-        )}
-        name="subCategory"
-        rules={
-          {
-            // required: true,
-          }
-        }
-        defaultValue={product.length ? product[0].subCategory : ""}
-      />
-      {errors.subCategory && (
-        <View style={styles.errorMessage}>
-          <Text style={{ color: "red", fontWeight: "bold" }}>Wrong!!</Text>
-        </View>
-      )}
+      <View
+        style={{
+          flexDirection: "row",
+          marginHorizontal: 20,
+          justifyContent: "space-around",
+          alignItems: "center",
+        }}
+      >
+        <Checkbox
+          status={weightOnly ? "checked" : "unchecked"}
+          onPress={() => {
+            setWeightOnly(!weightOnly);
+          }}
+        />
+        <Text>Check this box if this product supports Kgs only</Text>
+      </View>
     </ScrollView>
   );
 };
@@ -334,6 +375,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginHorizontal: 15,
   },
+
   errorMessage: {
     color: "red",
     marginHorizontal: 15,

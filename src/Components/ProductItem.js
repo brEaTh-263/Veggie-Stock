@@ -59,10 +59,12 @@ const ProductItem = ({
   return (
     <Card style={{ margin: 15 }}>
       <Card.Cover
+        resizeMode="contain"
         source={{
           uri: imageUrl
             ? imageUrl
             : "https://th.bing.com/th/id/OIP.ouOFcEHOYh7Dj3JCmDUfhwAAAA?pid=Api&rs=1",
+          cache: "reload",
         }}
       />
       <Card.Title title={name} subtitle={indianName ? indianName : name} />
